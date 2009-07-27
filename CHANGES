@@ -8,8 +8,7 @@
 		on nNvV it turns them to signed integers
 
 	- more test cases to cover all this	
-	- git repo seems to have taken
-	
+	- Setup a git repository at git.mindstab.net/git/cl-pack	
 
 0.1.1	2009-07-04
 	simple speed increase and code reduction improvements suggested by Zach
