@@ -5,6 +5,7 @@
 ;;;; Purpose:  CL-PACK code
 ;;;; Author:   Dan Ballard <http://mindstab.net>
 ;;;; Created:  May 2009
+;;;; Modified: August 2009
 ;;;; License:  BSD
 ;;;; Description:  CL-PACK supplies perl/php/ruby compatible
 ;;;;               pack() and unpack() functions to allow
@@ -52,6 +53,9 @@
 ;;;x null byte
 ;;;X Backup a byte
 
+;;;@   Null fill or truncate to absolute position specified by repeater
+;;;.   Null fill or truncate to absolute position specified by value/argument
+
 ;;;n unsighed short (16bit big endian)
 ;;;v unsigned short (16bit little endian)
 ;;;N unsigned long (32bit big endian)
@@ -77,6 +81,9 @@
 ;;;  >   sSiIlLqQfd  Force big endian
 ;;;  <   sSiIlLqQfd  Force little endian
 
+;;; ***** GROUPING *****
+;;; ()   Example: (pack "(cc)3" 65 66 67 68 69 70) => "ABCDEF"
+;;;      Example: (unpack "(cc)3") "ABCDEF") => (65 66) (67 68) (69 70)
 
 ;;; **** NOTE *****
 
@@ -85,40 +92,15 @@
 ;;; N2 or NN
 ;;; because there is no endian safe handling of 64 bit quads
 ;;; specified
+;;; in cl-pack you can also use q< , q> , Q< and Q>
 
 ;;; ************* TODO ***************
 
-;;;W unsigned char value, can be greater than 255 ; problms with unicode slime strings
-
 ;;;@ Null fill or truncate to absolute position, counted from the start of the innermost ()-group.
 ;;;. Null fill or truncate to absolute position specified by value.
-;;;(	Start of a ()-group.
 ;;;
 ;;;! MODIFIER, different uses  in context
-;;; < > use host endian
 ;;; / template
-
-;;;    j   A Perl internal signed integer value (IV).
-;;;    J   A Perl internal unsigned integer value (UV).
-;;;
-;;;    F	A Perl internal floating point value (NV) in the native format
-;;;    D	A long double-precision float in the native format.
-;;;	  (Long doubles are available only if your system supports long
-;;;	   double values _and_ if Perl has been compiled to support those.
-;;;           Causes a fatal error otherwise.)
-;;;
-;;;    p	A pointer to a null-terminated string.
-;;;    P	A pointer to a structure (fixed-length string).
-;;;
-;;;    u	A uuencoded string.
-;;;    U	A Unicode character number.  Encodes to a character in character mode
-;;;        and UTF-8 (or UTF-EBCDIC in EBCDIC platforms) in byte mode.
-;;;
-;;;    w	A BER compressed integer (not an ASN.1 BER, see perlpacktut for
-;;;	details).  Its bytes represent an unsigned integer in base 128,
-;;;	most significant digit first, with as few digits as possible.  Bit
-;;;	eight (the high bit) is set on each byte except the last.
-
 
 
 
@@ -151,7 +133,7 @@
 
 (defmacro inc-form ()
   "create a subseq of form that skips the current syntax object"
-  `(setf new-form (subseq form (+ 1 mod-chars repeater-chars))))
+  `(setf new-form (subseq form offset)))
 
 
 ;;; **** Basic byte conversion stuff ****
@@ -236,9 +218,9 @@
 
 ;;; **** String data stuff ****
 
-(defmacro pack-string ((repeater repeater-star) star-body count-body else-body)
-  "macro for building string type bodies for case statements in pack()"
- `(if ,repeater-star
+(defmacro handle-string ((repeater repeater-star) star-body count-body else-body)
+  "macro for building string type bodies for case statements in pack() or unpack()"
+  `(if ,repeater-star
 		 (progn
 		   ;(setf ,new-form (subseq ,new-form 2))
 		   (inc-form)
@@ -250,6 +232,18 @@
 		       result)
 		     (progn ,else-body)) ;; no repeater #
 		 ))
+
+(defmacro pack-string ((repeater repeater-star) star-body count-body else-body)
+  "macro for building string type bodies for case statements in pack()"
+ `(progn
+    (if (numberp item)
+	(setf item (format nil "~d" item)))
+    (handle-string (,repeater ,repeater-star) ,star-body ,count-body ,else-body)))
+
+(defmacro unpack-string ((repeater repeater-star) star-body count-body else-body)
+  "macro for building string type bodies for case statements in unpack()"
+  `(handle-string (,repeater ,repeater-star) ,star-body ,count-body ,else-body))
+
 
 (defun 8bits-to-byte (8bits &optional (byte-form (lambda (i) (byte 8 (- 7 i)))))
   "turns a string of 8 or less bits into a byte
@@ -357,6 +351,17 @@
       (char form offset)))
 
 
+(defun find-matching-paren (str)
+  ;; takes a string returns the offset of the closing parenthesis, return -1 on fail
+  (let ((depth 0))
+    (do ((i 0 (incf i)))
+      ((or (< depth 0) (>= i (length str))) (if (< depth 0) (1- i) -1))
+      (if (char= (char str i) #\()
+	  (incf depth)
+	  (if (char= (char str i) #\))
+	      (decf depth))))))
+
+
 
 ;;; The header of a function (pack or unpack) that parses a form as defined above
 ;;; parses form and generates variables
@@ -364,59 +369,90 @@
 ;;; and then executes body
 (defmacro def-form-parser (fn-name (&rest extra-args) end-test final-item &rest body)
   `(defun ,fn-name (form ,@extra-args)
+     ;(format t "parser: form:'~a'~%" form)
+
+     ;; if termination tests, return final item
      (if (or (string= form "") ,end-test) 
 	 ,final-item
-	 (let ((repeater-star nil)) 
-	    ;; try to get a number and how long it is from form
-	   (multiple-value-bind (repeater repeater-chars) 
-	       (if (> (length form) 1)
-		   (parse-integer (strtail form) :junk-allowed t) 
-		   (values 0 0))
-	     (if (eql repeater nil)
-		 (if (char= #\* (char form 1))
-		     (progn
-		       (setf repeater-star t)
-		       (setf repeater 0)
-		       (setf repeater-chars 1)) ; hack, new-form = form
-		     (progn (setf repeater 0)
-			    (setf repeater-chars 0))))
+	 
+	 ;; parsing variables and init
+	 (let ((offset 1)
+	       (inner-length 0)
+	       (repeater-star nil)
+	       (repeater 0)
+	       (mod-! nil)
+	       (mod-> nil)
+	       (mod-< nil)
+	       (/-pos 0))
 
-	     (let ((mod-! nil)
-		   (mod-> nil)
-		   (mod-< nil)
-		   (mod-chars 0))
-		   (do ((next-char (+ 2 repeater-chars) (1+ next-char)) ; +2 init because the variables dont set till atfer all are proccessed 
-			(ch (next-char form (1+ repeater-chars))
-			    (next-char form next-char)))
-			
-		       ((and (char/= ch #\!) (char/= ch #\<) (char/= ch #\>)))  
-		     (format t "char: ~a " ch)
-		     (incf mod-chars)
-		     (case ch
-		       (#\! (setf mod-! t))
-		       (#\> (setf mod-> t))
-		       (#\< (setf mod-< t)))
+	   (if (char= #\( (char form 0))
+	       (progn 
+		 (setf inner-length (find-matching-paren (strtail form)))
+		 (if (= inner-length (- 1))
+		     (error "cl-pack: Syntax error in 'form': unmatched bracket at '~a'~%" form)
+		     (setf offset (+ 2 inner-length)))))
+
+	   ;; parse repeaters and modifiers
+	   (do ((str (subseq form offset) (subseq form offset))
+		(offset1 offset offset)
+		(offset2 0 offset1))
+	       
+	       ((= offset offset2))
+	     ;; try to get a number and how long it is from form
+	     (multiple-value-bind (repeater-count repeater-chars) 
+		 (if (>= (length str) 1)
+		     (parse-integer str :junk-allowed t) 
+		     (values 0 0))
+	       (if (eql repeater-count nil)
+		   ;; no repeater #, check for other modifiers ( * ! < > )
+		   (case (char str 0)
+		     (#\! (progn (setf mod-! t) (incf offset)))
+		     (#\> (progn (setf mod-> t) (incf offset)))
+		     (#\< (progn (setf mod-< t) (incf offset)))
+		     (#\* (progn (setf repeater-star t)(incf offset)))
+		     (#\/ (progn 
+			    (setf /-pos offset)
+			    ;; a/N... we need offset to point to after N...
+			    ;; so we need to parse it so inc offset to after 'N'
+			    (incf offset 2) 
+			    ))
 		     )
-		   (format t "VALUES: !~a >~a <~a #:~a~%" mod-! mod-> mod-< mod-chars)
-	       
-	       
+			  
+			    
+		   
+		   (progn ; repeater-count == #
+		     (if (> repeater-count 0) (setf repeater repeater-count))
+		     (incf offset repeater-chars))
+		   )))
 
 
-		;;  (format t "r:~a rc:~a~%" repeater repeater-chars)
-	     (let ((new-form form))
-	       (inc-form)
-	       (format t "form'~a' new-form:'~a'~%" form new-form)
+	       (let ((new-form form))
+		 (inc-form)
+
+		 (if (or repeater-star (> repeater 1))
+		     (setf new-form (concatenate 'string 
+						 (subseq form 0 (if (> inner-length 0) (+ 2 inner-length) 1))
+						 (if mod-! "!" "") 
+						 (if mod-> ">" "")
+						 (if mod-< "<" "")
+						 (if repeater-star
+						     "*"
+						     (write-to-string (1- repeater)))
+						 (subseq form offset))))
+
+		 (progn ,@body))))))
 
 
-	       (if (or repeater-star (> repeater 1))
-		   (setf new-form (concatenate 'string 
-					       (string (char form 0))
-					       (if repeater-star
-						   "*"
-						   (write-to-string (1- repeater)))
-					       (subseq form (1+ repeater-chars)))))
-	       (progn ,@body))))))))
+(defmacro gen-modifiers-list ()
+  `(list (if mod-> :mod->) (if mod-< :mod-<) (if mod-! :mod-!)))
 
+(defmacro set-modifiers (modifiers)
+  `(loop for m in ,modifiers do 
+			   (case m
+			     ;; < > in modifiers are secondary to those already set in local form syntax
+			     (:mod-> (if (not mod-<) (setf mod-> t)))
+			     (:mod-< (if (not mod->) (setf mod-< t)))
+			     (:mod-! (setf mod-! t)))))
 
 
 ;;; *********** The Main part ***********
@@ -425,11 +461,15 @@
 ;;;  pack
 ;;;  perl compatile pack() function.
 ;;;  form: is a string of characters corresponding to encodings of data
-;;;  rest: is the data to be 'packed'
+;;;  rest: the data to be 'packed'
+;;;        there are two ways of calling pack with arguments
+;;;          1) reguarly with a series of arguments
+;;;          2) with a single list of the arguments.  
+;;;          Pack will remove each argument it uses destructively from this list
 ;;;  returns: a string of 'packed' data
 (def-form-parser pack (&rest rest)
-  ;; extra end test
-    
+
+  ;; extra end test    
   (and (eql nil rest) (and (not (eql (strhead form) #\x)) (not (eql (strhead form) #\X))))
   
   ;; result
@@ -439,28 +479,84 @@
 
 
   ;;; BODY
- 
-  (let ((result (if (eql (first rest) :result)
-		    (let ((r (second rest)))
-		      (setf rest (rest (rest rest)))
-		      r)
-		    "")))
-    (if (and (eql nil rest) (and (not (eql (strhead form) #\x)) (not (eql (strhead form) #\X))))
+  ;; Extra optional keyed parameters
+  ;; :result      result is the result so far of the pack operation
+  ;; :modifiers   modifiers are global modifiers such as those set on a 
+  ;;                grouping like: (ss)<
+
+ ; (format t "pack: form:'~a' rest:~a~%" form rest)
+  
+  (let ((result "")
+	(modifiers nil))
+    
+    ;; parse extra optional keyed parameters
+    (do ((end? nil)
+	 (i 0))
+	((or end? (>= i (length rest))) )
+      (case (elt rest i)
+	(:result (progn 
+		   (setf result (second rest))
+		   (setf rest (rest (rest rest)))))
+	(:modifiers (progn
+		      (setf modifiers (second rest))
+		      (set-modifiers (second rest))
+		      (setf rest (rest (rest rest)))))
+	(otherwise (setf end? t))))
+	 
+    
+
+    ;; Instead of passing a series of arguments, you can call it with a destructable list of arguments
+    (let ((dlist-arg-style nil))
+
+      (if (and (>= 1 (length rest)) (listp (first rest)))
+	  (progn 
+	    (setf dlist-arg-style t)
+	    (setf rest (first rest))))
+
+      ;; second end test (redundant a little, can we merge?
+    (if (and (or (eql nil rest) (equal '(nil) rest)) (and (not (eql (strhead form) #\x)) (not (eql (strhead form) #\X))))
 	result
 	(progn
 
-  (format t "~a ~a ~a~%" form result rest)
+	  ;; set up of required endian functions
     (let ((bytes-to-string-fn #'bytes-to-string-rev) ; LITTLE ENDIAN
 	  (item (first rest))
 	  (new-rest (rest rest))) ; default rest for numbers
       #+big-endian(setf bytes-to-string-fn #'bytes-to-string) ; BIG ENDIAN
-      (if mod->
+      (if mod-> 
 	  (setf bytes-to-string-fn #'bytes-to-string))
       (if mod-< 
 	  (setf bytes-to-string-fn #'bytes-to-string-rev))
 
+      ;; pack case satement
 	(let ((new-result
 
+	       ;; FORM of: sequence length / sequence items
+	       (if (> /-pos 0)
+		(progn ;; length item / sequence item
+		  (let ((sequence-type (char form (1+ /-pos)))
+			(rest-len (length rest))
+			(consumed-length 0)
+			(ret (pack (subseq form (1+ /-pos) offset ) :modifiers (gen-modifiers-list) rest)))
+
+		    (setf consumed-length (- rest-len (if (eql nil (first rest)) 0 (length rest))))
+
+		    ;; if its a string determine consumed length differently
+		    (if (member sequence-type '(#\a #\A #\Z #\b #\B #\h #\H))
+			(let ((item-length 
+			       (if (numberp item)
+				   (length (format nil "~d" item))
+				   (length item))))
+			  (setf consumed-length 
+				(if repeater-star
+				    item-length
+				    (min repeater item-length)))))
+
+		    (inc-form)
+		    (concatenate 'string (pack (subseq form 0 /-pos) consumed-length) ret)))
+		
+		  
+		  ;; ALL other FORMS 
 	    (case (strhead form)
 	      (#\n		;Unsigned Short 16bit Big Endian AB=AB
 	       (pack-int 2 :big))
@@ -490,7 +586,7 @@
 
 
 	      ((#\s #\S)		;signed/unsigned short 16bit
-	       (pack-int 2 native-endian))
+	       (pack-int 2 :native))
 
 	      ((#\l #\L)		;signed/unsigned short 32bit
 	       (pack-int 4 :native))
@@ -561,31 +657,82 @@
 		(setf result (subseq result 0 (- (length result)
 						 (min (length result) delta)))))
 		 (inc-form)
+		 (setf new-rest rest)
 		""
 		)) 
-	 		   	 
-	      (otherwise (progn
+
+		((#\. #\@)
+		      ;; . consume a numerical arg - null fill or truncate to that position
+		      ;; @ null fill or truncate to repeater specified position
+		 (let ((position item)) ; .
+		   (if (char= #\@ (strhead form))
+		       (progn
+			 (setf position repeater)
+			 (setf new-rest rest)
+			 (inc-form)))
+		   
+		   (setf result (subseq result 0 (min (length result) position)))
+		   (make-list (max 0 (- position (length result))) :initial-element #\null)
+		 ))
+
+		(#\( ; Grouping
+		 (let ((ret
+			(pack (subseq form 1 (1+ inner-length)) :modifiers (gen-modifiers-list) rest)))
+			  (setf new-rest rest) ; for dlist-style carry on
+			  ret))
+		 
+		 
+
+		(otherwise (progn
 			   (setf new-rest rest) ; didn't do anything, don't consume anything
-			   ""))))
+			   "")))))
 	    ) ;; let ()
 	
-	;; Concatenate current form and the result of recursive calls 
-	(format t "~a~%" new-result)
+	  ;(format t "~a~%" new-result)
 
-	  (apply #'pack (append (list new-form :result (concatenate 'string result new-result)) new-rest))))))))
+	  ;; if using a descructable arg list
+	  (if dlist-arg-style
+	      (progn
+		(if (not (equal rest new-rest)) ; consumed an arg
+		    (progn 
+		      ;; so remove the arg from the arg list
+		      (setf (car rest) (second rest)) 
+		      (setf (cdr rest) (rest (rest rest)))))
+		;; regardless, continue using the dlist style
+		(setf new-rest (list rest))))
 
+	  ;; Recursion for the rest of pack
+	  (apply #'pack (append (list new-form :result (concatenate 'string result new-result) :modifiers modifiers) new-rest)))))))))
+
+;; macro for unpack.
+;; cuts out and returns part of a string to be used for processing while setting
+;; new-str to the remainder
 (defmacro cut-str (str len new-str)
   `(let ((ret (subseq ,str 0 ,len)))
      (setf ,new-str (subseq ,str ,len))
+     (if consumed (incf consumed ,len))
      ret))
 	
 ;;;  perl compatible unpack() function
 ;;;   form: a string of characters corresonding to decodings
 ;;;   string: a string of binary data to be decoded
+;;;   consumed: optional key parameter.  If nil (default) nothing happens
+;;;             if an integer, ever byte consumed increments consumed
+;;;             and it is the last value return in the values list
 ;;;  returns: the decoded data in specified format
-(def-form-parser unpack (string)
+(def-form-parser unpack (string &key (consumed nil) (modifiers nil))
+
+  ;; extra end test
   (<= (length string) 0)
-  nil
+
+  ;; final item
+  (if consumed 
+      (values consumed nil)
+      nil)
+
+  (set-modifiers modifiers)
+
+  ;; setting up of endian specific functions
   (let ((string-to-bytes-fn #'string-to-bytes-rev) ; LITTLE ENDIAN
 	(new-str string))
     #+big-endian(setf string-to-bytes-fn #'string-to-bytes)
@@ -594,74 +741,85 @@
     (if mod-<
 	(setf string-to-bytes-fn #'string-to-bytes-rev))
 
+    ;; pack case statement and recursive call to unpack
+    ;; note: not tail optiomized :fix ?
     (apply #'values
 	   (remove nil (append 
-	    (list 
-	     (case (strhead form)
-	       (#\n (unpack-mod!-uint 2 :big)) ; unsigned short 16bit big endian
-	       (#\N (unpack-mod!-uint 4 :big)) ; unsigned long 32bit big endian
-	       (#\v (unpack-mod!-uint 2 :little)) ; unsigned short 16bit little endian
-	       (#\V (unpack-mod!-uint 4 :little)) ; unsigned long 32bit little endian
 
-	       (#\c (unpack-int 1 :big)) ; 1 byte signed character 
-	       (#\C (unpack-uint 1 :big)) ; 1 byte unsigned character
-	       (#\s (unpack-int 2 :native)) ; 2 byte signed native endian	       
-	       (#\S (unpack-uint 2 :native)) ; 2 byte signed native endian
-	       (#\l (unpack-int 4 :native)) ; 4 byte signed native endan	       
-	       (#\L (unpack-uint 4 :native)) ; 4 byte unsigned native endian
-	       (#\q (unpack-int 8 :natice)) ; 8 byte signed native endian
-	       (#\Q (unpack-uint 8 :native)) ; 8 byte unsigned native endian
-	       (#\i (let ((int-size 4)) ; native signed int size and endian
-			    #+long-integer(setf int-size 8)
-			    (unpack-int int-size :native)))
+           (list 
+	    (case (strhead form)
+	     (#\n (unpack-mod!-uint 2 :big)) ; unsigned short 16bit big endian
+	     (#\N (unpack-mod!-uint 4 :big)) ; unsigned long 32bit big endian
+	     (#\v (unpack-mod!-uint 2 :little)) ; unsigned short 16bit little endian
+	     (#\V (unpack-mod!-uint 4 :little)) ; unsigned long 32bit little endian
 
-	       (#\I (let ((int-size 4)) ; native unsigned int size and endian
-			    #+long-integer(setf int-size 8)
-			    (unpack-int int-size :native)))
+	     (#\c (unpack-int 1 :big))	  ; 1 byte signed character 
+	     (#\C (unpack-uint 1 :big))	  ; 1 byte unsigned character
+	     (#\s (unpack-int 2 :native)) ; 2 byte signed native endian	       
+	     (#\S (unpack-uint 2 :native)) ; 2 byte signed native endian
+	     (#\l (unpack-int 4 :native)) ; 4 byte signed native endan	       
+	     (#\L (unpack-uint 4 :native)) ; 4 byte unsigned native endian
+	     (#\q (unpack-int 8 :natice)) ; 8 byte signed native endian
+	     (#\Q (unpack-uint 8 :native)) ; 8 byte unsigned native endian
+	     (#\i (let ((int-size 4)) ; native signed int size and endian
+		    #+long-integer(setf int-size 8)
+		    (unpack-int int-size :native)))
+
+	     (#\I (let ((int-size 4)) ; native unsigned int size and endian
+		    #+long-integer(setf int-size 8)
+		    (unpack-int int-size :native)))
 	       
-	       	       (#\w (ber-decode (cut-str string (ber-str-length string)  new-str)))
+	     (#\w (ber-decode (cut-str string (ber-str-length string)  new-str)))
 
-	       (#\e   (ieee-floats:decode-float32 (string-to-bytes-rev (cut-str string 4 new-str) 4))) ; 4 byte floating point little endian
-	       (#\E   (ieee-floats:decode-float64 (string-to-bytes-rev (cut-str string 8 new-str) 8))) ; 8 byte floating point little endian
+	     (#\e   (ieee-floats:decode-float32 (string-to-bytes-rev (cut-str string 4 new-str) 4))) ; 4 byte floating point little endian
+	     (#\E   (ieee-floats:decode-float64 (string-to-bytes-rev (cut-str string 8 new-str) 8))) ; 8 byte floating point little endian
 
-	       (#\g   (ieee-floats:decode-float32 (string-to-bytes (cut-str string 4 new-str) 4))) ; 4 byte floating point big endian
-	       (#\G   (ieee-floats:decode-float64 (string-to-bytes (cut-str string 8 new-str) 8))) ; 8 byte floating point big endian
+	     (#\g   (ieee-floats:decode-float32 (string-to-bytes (cut-str string 4 new-str) 4))) ; 4 byte floating point big endian
+	     (#\G   (ieee-floats:decode-float64 (string-to-bytes (cut-str string 8 new-str) 8))) ; 8 byte floating point big endian
 
-	       (#\f   (ieee-floats:decode-float32 (funcall string-to-bytes-fn (cut-str string 4 new-str) 4))) ; 4 byte floating point native endian
-	       (#\d   (ieee-floats:decode-float64 (funcall string-to-bytes-fn (cut-str string 8 new-str) 8))) ; 8 byte floating point native endian
+	     (#\f   (ieee-floats:decode-float32 (funcall string-to-bytes-fn (cut-str string 4 new-str) 4))) ; 4 byte floating point native endian
+	     (#\d   (ieee-floats:decode-float64 (funcall string-to-bytes-fn (cut-str string 8 new-str) 8))) ; 8 byte floating point native endian
 
-	       ((#\a #\A #\Z) ; chatacter string with various paddings
-		(let ((special-chars 
-		       (if (char= #\A (strhead form)) 
-			   (coerce '(#\null #\space) 'string)
-			   "")))
+	     ((#\a #\A #\Z)   ; chatacter string with various paddings
+	      (let ((special-chars 
+		     (if (char= #\A (strhead form)) 
+			 (coerce '(#\null #\space) 'string)
+			 "")))
 			
 		    
-		  (pack-string (repeater repeater-star)
-			       (string-trim special-chars (cut-str string (length string) new-str))
-			       (string-trim special-chars (cut-str string (min repeater (length string)) new-str))
-			       (cut-str string 1 new-str))))
+		(unpack-string (repeater repeater-star)
+			     (string-trim special-chars (cut-str string (length string) new-str))
+			     (string-trim special-chars (cut-str string (min repeater (length string)) new-str))
+			     (cut-str string 1 new-str))))
 
-	       ((#\b #\B) ; bit string
-		(let ((bit-unpack-fn (if (char= (strhead form) #\b) #'byte-to-8bits-rev #'byte-to-8bits)))
-		  (pack-string (repeater repeater-star)
-			       (bit-unpack (cut-str string (length string) new-str) bit-unpack-fn)
-			       (subseq (bit-unpack (cut-str string (min (ceiling (/ repeater 8)) (length string)) new-str) bit-unpack-fn) 0 (min repeater (* 8 (length string))))
-			       (subseq (bit-unpack (cut-str string 1 new-str) bit-unpack-fn) 0 1))))
+	     ((#\b #\B)			; bit string
+	      (let ((bit-unpack-fn (if (char= (strhead form) #\b) #'byte-to-8bits-rev #'byte-to-8bits)))
+		(unpack-string (repeater repeater-star)
+			     (bit-unpack (cut-str string (length string) new-str) bit-unpack-fn)
+			     (subseq (bit-unpack (cut-str string (min (ceiling (/ repeater 8)) (length string)) new-str) bit-unpack-fn) 0 (min repeater (* 8 (length string))))
+			     (subseq (bit-unpack (cut-str string 1 new-str) bit-unpack-fn) 0 1))))
 
-	       ((#\h #\H) ; hex string
-		(let ((hex-unpack-fn (if (char= (strhead form) #\h) #'byte-to-2hex-rev #'byte-to-2hex)))
-		  (pack-string (repeater repeater-star)
-			       (hex-unpack (cut-str string (length string) new-str) hex-unpack-fn)
-			       (subseq (hex-unpack (cut-str string (min (ceiling (/ repeater 2)) (length string)) new-str) hex-unpack-fn) 0 (min repeater (* 2 (length string))))
-			       (subseq (hex-unpack (cut-str string 1 new-str) hex-unpack-fn) 0 1))))
+	     ((#\h #\H)			; hex string
+	      (let ((hex-unpack-fn (if (char= (strhead form) #\h) #'byte-to-2hex-rev #'byte-to-2hex)))
+		(unpack-string (repeater repeater-star)
+			     (hex-unpack (cut-str string (length string) new-str) hex-unpack-fn)
+			     (subseq (hex-unpack (cut-str string (min (ceiling (/ repeater 2)) (length string)) new-str) hex-unpack-fn) 0 (min repeater (* 2 (length string))))
+			     (subseq (hex-unpack (cut-str string 1 new-str) hex-unpack-fn) 0 1))))
 	       
-	       (#\x ; null character
-		(cut-str string 1 new-str)
-		nil)
+	     (#\x			; null character
+	      (cut-str string 1 new-str)
+	      nil)
 
-	       (otherwise nil)
-	       ))
+	     (#\(			; grouping ()
+	      (let* ((ret (multiple-value-list (unpack (subseq form 1 (1+ inner-length)) string :consumed 0 :modifiers (gen-modifiers-list))))
+		       (sub-cons (first (last ret))))
+		  (cut-str string sub-cons new-str)
+		  (nbutlast ret))
+	      )
 
-     					;; result of recursion
-	    (multiple-value-list (unpack new-form new-str))) :from-end t :count 1))))
+	     (otherwise nil)
+	     ))
+
+
+	   ;; result of recursion
+	   (multiple-value-list (unpack new-form new-str :consumed consumed :modifiers modifiers))) :from-end t :count 1))))

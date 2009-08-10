@@ -1,13 +1,19 @@
 0.2	2009-07
 	- added support for signed numbers that mirrors perl's
 	- fixed native endian selection bug
+	- added w (BER: Binary Encoded Representation)
+	- added X (backup) in pack
 	- added support for <> modifiers 
 		on native endian directives (sSiIlLqQdf)  
 		they can be forced to big or small endian with < > modifiers
 	- added support for ! modifier
 		on nNvV it turns them to signed integers
+	- added . and @ support to pack
+	- added full group support to pack and unpack 
+	- fixed string types to accept numvers and cast them to strings on the fly (ala perl)
+	- added / template to pack
 
-	- more test cases to cover all this	
+	- added more test cases to cover all the new additions and bug fixes	
 	- Setup a git repository at git.mindstab.net/git/cl-pack	
 
 0.1.1	2009-07-04
