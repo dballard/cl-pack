@@ -51,8 +51,9 @@
 ;;;d double precision float
 
 ;;;x null byte
-;;;X Backup a byte
+;;;X Backup a byte (pack only)
 
+;;; (pack only)
 ;;;@   Null fill or truncate to absolute position specified by repeater
 ;;;.   Null fill or truncate to absolute position specified by value/argument
 
@@ -85,6 +86,14 @@
 ;;; ()   Example: (pack "(cc)3" 65 66 67 68 69 70) => "ABCDEF"
 ;;;      Example: (unpack "(cc)3") "ABCDEF") => (65 66) (67 68) (69 70)
 
+;;; ***** / Template *****
+;;; sequence length / sequence item
+;;;   in pack, writes out how ever many sequence items PRECEDED by the length 
+;;;   in the form of sequence length
+;;;   example: (pack "a/c3" 65 66 67) => "3ABC"
+;;;   in unpack, reads the length and unpacks that many
+;;;   example: (unpack "a/c" "3ABC") => (65 66 67)
+
 ;;; **** NOTE *****
 
 ;;; A lot use users of pack() and unpack() in other languages
@@ -93,12 +102,6 @@
 ;;; because there is no endian safe handling of 64 bit quads
 ;;; specified
 ;;; in cl-pack you can also use q< , q> , Q< and Q>
-
-;;; ************* TODO ***************
-
-;;;! MODIFIER, different uses  in context
-;;; / template
-
 
 
 ;;; ***************** CL-PACK **********************

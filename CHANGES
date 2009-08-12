@@ -1,4 +1,4 @@
-0.2	2009-07
+0.2	2009-08-12
 	- added support for signed numbers that mirrors perl's
 	- fixed native endian selection bug
 	- added w (BER: Binary Encoded Representation)

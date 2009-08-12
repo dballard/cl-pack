@@ -1,6 +1,6 @@
 CL-PACK
 Dan Ballard <http://mindstab.net>
-June 2009
+August 2009
 
 CL-PACK supplier perl/php/ruby compatible pack() and unpack() functions to allow easy use of binary protocols with the above mentioned languages and C.
 
