@@ -82,6 +82,7 @@
    (mod-<>)
    (grouping)
    (pack-/)
+   (unpack-/)
    ))
 
 (deftest test-silent ()
@@ -259,4 +260,12 @@
     (string= (pack "n/c*" 65 66 67) (concatenate 'string (string #\null) (string (code-char 3)) "ABC")) ;basic pack into a number with a *
     (string= (pack "a/a3" "ABC") "3ABC") ;string pack
     (string= (pack "a/a*" "ABC") "3ABC") ;string pack with *
+    ))
+
+(deftest unpack-/ ()
+  (check
+    (equal (multiple-value-list (unpack "a/c" "3AB")) '(65 66))
+    (equal (multiple-value-list (unpack "n/c" (concatenate 'string (string #\null) (string (code-char 3)) "ABC"))) '(65 66 67))
+    (equal (multiple-value-list (unpack "a/ac" "2ABC")) '("AB" 67))
+  
     ))

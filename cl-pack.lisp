@@ -96,9 +96,6 @@
 
 ;;; ************* TODO ***************
 
-;;;@ Null fill or truncate to absolute position, counted from the start of the innermost ()-group.
-;;;. Null fill or truncate to absolute position specified by value.
-;;;
 ;;;! MODIFIER, different uses  in context
 ;;; / template
 
@@ -237,7 +234,7 @@
   "macro for building string type bodies for case statements in pack()"
  `(progn
     (if (numberp item)
-	(setf item (format nil "~d" item)))
+	(setf item (write-to-string item)))
     (handle-string (,repeater ,repeater-star) ,star-body ,count-body ,else-body)))
 
 (defmacro unpack-string ((repeater repeater-star) star-body count-body else-body)
@@ -545,7 +542,7 @@
 		    (if (member sequence-type '(#\a #\A #\Z #\b #\B #\h #\H))
 			(let ((item-length 
 			       (if (numberp item)
-				   (length (format nil "~d" item))
+				   (length (write-to-string item))
 				   (length item))))
 			  (setf consumed-length 
 				(if repeater-star
@@ -746,7 +743,23 @@
     (apply #'values
 	   (remove nil (append 
 
-           (list 
+            
+	    (if (> /-pos 0)
+		(progn
+		  (let* ((length-item (subseq form 0 /-pos))
+			 (sequence-item (subseq form (1+ /-pos) offset))
+			 (lengths (multiple-value-list (unpack length-item string :consumed 0 :modifiers modifiers)))
+			 (seq-len (if (numberp (first lengths))
+				      (write-to-string (first lengths))
+				      (first lengths)))
+			 
+			 (ret (multiple-value-list (unpack (concatenate 'string sequence-item seq-len) (subseq string (second lengths)) :consumed 0 :modifiers modifiers)))
+			 (consumed-len (+ (first (last ret)) (second lengths))))
+		    (cut-str string consumed-len new-str)
+		    (inc-form)
+		    (nbutlast ret)
+		 ))
+	   (list					   
 	    (case (strhead form)
 	     (#\n (unpack-mod!-uint 2 :big)) ; unsigned short 16bit big endian
 	     (#\N (unpack-mod!-uint 4 :big)) ; unsigned long 32bit big endian
@@ -818,7 +831,7 @@
 	      )
 
 	     (otherwise nil)
-	     ))
+	     )))
 
 
 	   ;; result of recursion

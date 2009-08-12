@@ -10,9 +10,8 @@
 		on nNvV it turns them to signed integers
 	- added . and @ support to pack
 	- added full group support to pack and unpack 
-	- fixed string types to accept numvers and cast them to strings on the fly (ala perl)
-	- added / template to pack
-
+	- fixed string types to accept numbers and cast them to strings on the fly (ala perl)
+	- added / template to pack and unpack
 	- added more test cases to cover all the new additions and bug fixes	
 	- Setup a git repository at git.mindstab.net/git/cl-pack	
 
