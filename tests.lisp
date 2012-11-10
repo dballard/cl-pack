@@ -104,6 +104,7 @@
    (string= (pack "E" 25) (concatenate 'string (gen-null-string 6) "9@"))
    (string= (pack "x") (string #\null))
    (string= (pack "w" 193) (coerce `(,(code-char 129) #\A) 'string))
+   (string= (pack "w" 0) (coerce `(,(code-char 0)) 'string))
  ))
 
 
@@ -154,6 +155,7 @@
    (= (unpack "G" (concatenate 'string "@9" (gen-null-string 6))) 25)
    (= (unpack "E" (concatenate 'string (gen-null-string 6) "9@")) 25)
    (= (unpack "w" (coerce `(,(code-char 129) #\A) 'string)) 193)
+   (= (unpack "w" (coerce `(,(code-char 0)) 'string)) 0)
    ))
 
 (deftest unpack-combinations ()
