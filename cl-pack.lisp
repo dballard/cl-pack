@@ -152,6 +152,7 @@
   "function to encode a BER number into a binary byte string"
   (let ((num_bytes (ceiling (/ (log (1+ number) 2) 7)))
 	(n number))
+    (if (eql 0 n) (incf num_bytes))
     (coerce (loop for i from  (1- num_bytes) downto 0 collect 
 	 (code-char (+ (if (> i 0)
 			   128
