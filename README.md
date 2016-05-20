@@ -4,7 +4,7 @@ August 2009
 
 [www.cliki.net/cl-pack](http://www.cliki.net/cl-pack)
 
-CL-PACK supplies Perl/PHP/Ruby/Python compatible pack() and unpack() functions to allow easy use of *(binary format) protocols and files with the above mentioned languages and C. CL-PACK was released by Dan Ballard under the MIT license.
+CL-PACK supplies Perl/PHP/Ruby/Python compatible pack() and unpack() functions to allow easy use of *(binary format) protocols and files with the above mentioned languages and C. CL-PACK was released by Dan Ballard under the BSD license.
 
 The purpose of cl-pack is to take native Lisp data like numbers, floats, and strings and encode it in a safe binary format in string that can then be written to a file or exchanged with another program while unpack can extract data from binary formats and protocols.
 
