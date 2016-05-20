@@ -1,7 +1,7 @@
 ;;;; -*- Mode: Lisp; Syntax: ANSI-Common-Lisp; Base: 10 -*-
 ;;;; ******************************************************
 ;;;; FILE IDENTIFICATION
-;;;; 
+;;;;
 ;;;; Name:     cl-pack.asd
 ;;;; Purpose:  System definition for CL-PACK
 ;;;; Author:   Dan Ballard <http://mindstab.net>
@@ -17,36 +17,18 @@
 (defpackage #:cl-pack-system (:use #:asdf #:cl))
 (in-package #:cl-pack-system)
 
-; Try to find ieee-floats in the system,
-; otherwise we'll load the copy we ship with
-;(eval-when (:compile-toplevel :load-toplevel :execute)
-(handler-case
-    (unless (find-package 'ieee-floats)
-      (progn
-	(asdf:operate 'asdf:load-op 'ieee-floats)
-	(push :native-ieee-floats *features*)))
-  (MISSING-COMPONENT (e) nil))
-
 
 (defsystem #:cl-pack
   :name "cl-pack"
   :author "Dan Ballard <haplo@mindstab.net>"
   :version "0.1"
-  :licence "BSD"
-  :description "perl compatible binary pack() and unpack() library"
-  :depends-on #+native-ieee-floats(:ieee-floats)
-              #-native-ieee-floats()
-  :components (#-native-ieee-floats
-	       (:module ieee-floats
-			:components ((:file "ieee-floats")))
-	       
-               (:file "package"
-                      :depends-on (ieee-floats))
-	       (:file "cl-pack"
-		      :depends-on ("package" ieee-floats))))
-	       
+  :licence "BSD-3-Clause"
+  :description "Perl compatible binary pack() and unpack() library"
+  :depends-on (:ieee-floats)
+  :components ((:file "package")
+               (:file "cl-pack")))
+
+
 (defsystem #:cl-pack-test
   :depends-on (:cl-pack)
   :components ((:file "tests")))
-  
-  
