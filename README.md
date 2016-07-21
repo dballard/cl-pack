@@ -9,6 +9,12 @@ The purpose of cl-pack is to take native Lisp data like numbers, floats, and str
 
 cl-pack has nearly full support for all features offered by Perl's pack. It boasts full support for most data types and formating rules from numbers and string to formating rules and grouping and templates.  cl-pack also supports endian safe floats as outlined by ruby. cl-pack is supports ASDF so as to make it easy to integrate into your existing system.  
 
+## Instalation ##
+
+cl-pack is available in [QuickLisp](https://www.quicklisp.org/beta/)
+
+    CL-PACK> (ql:quickload "cl-pack")
+
 ## Example: ##
 
     CL-PACK> (pack "VgA*c*" #x41424344 161.99 " a string " 69 70 71)
