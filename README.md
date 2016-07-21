@@ -13,7 +13,7 @@ cl-pack has nearly full support for all features offered by Perl's pack. It boas
 
 cl-pack is available in [QuickLisp](https://www.quicklisp.org/beta/)
 
-    CL-PACK> (ql:quickload "cl-pack")
+    CL-USER> (ql:quickload "cl-pack")
 
 ## Example: ##
 
