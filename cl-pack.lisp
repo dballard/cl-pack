@@ -380,7 +380,7 @@
 	 (let ((offset 1)
 	       (inner-length 0)
 	       (repeater-star nil)
-	       (repeater 0)
+	       (repeater nil)
 	       (mod-! nil)
 	       (mod-> nil)
 	       (mod-< nil)
@@ -403,14 +403,14 @@
 	     (multiple-value-bind (repeater-count repeater-chars) 
 		 (if (>= (length str) 1)
 		     (parse-integer str :junk-allowed t) 
-		     (values 0 0))
-	       (if (eql repeater-count nil)
+		     (values nil 0))
+	       (if (and (>= (length str) 1) (eql repeater-count nil))
 		   ;; no repeater #, check for other modifiers ( * ! < > )
 		   (case (char str 0)
 		     (#\! (progn (setf mod-! t) (incf offset)))
 		     (#\> (progn (setf mod-> t) (incf offset)))
 		     (#\< (progn (setf mod-< t) (incf offset)))
-		     (#\* (progn (setf repeater-star t)(incf offset)))
+		     (#\* (progn (setf repeater-star t) (incf offset)))
 		     (#\/ (progn 
 			    (setf /-pos offset)
 			    ;; a/N... we need offset to point to after N...
@@ -418,11 +418,9 @@
 			    (incf offset 2) 
 			    ))
 		     )
-			  
-			    
 		   
 		   (progn ; repeater-count == #
-		     (if (> repeater-count 0) (setf repeater repeater-count))
+		     (if repeater-count (setf repeater repeater-count))
 		     (incf offset repeater-chars))
 		   )))
 
@@ -430,7 +428,7 @@
 	       (let ((new-form form))
 		 (inc-form)
 
-		 (if (or repeater-star (> repeater 1))
+		 (if (or repeater-star (and repeater (> repeater 1)))
 		     (setf new-form (concatenate 'string 
 						 (subseq form 0 (if (> inner-length 0) (+ 2 inner-length) 1))
 						 (if mod-! "!" "") 
@@ -441,7 +439,8 @@
 						     (write-to-string (1- repeater)))
 						 (subseq form offset))))
 
-		 (progn ,@body))))))
+		 (progn
+		   ,@body))))))
 
 
 (defmacro gen-modifiers-list ()
@@ -478,7 +477,6 @@
       (second rest)
       "")
 
-
   ;;; BODY
   ;; Extra optional keyed parameters
   ;; :result      result is the result so far of the pack operation
@@ -504,15 +502,13 @@
 		      (setf rest (rest (rest rest)))))
 	(otherwise (setf end? t))))
 	 
-    
-
     ;; Instead of passing a series of arguments, you can call it with a destructable list of arguments
     (let ((dlist-arg-style nil))
-
       (if (and (>= 1 (length rest)) (listp (first rest)))
-	  (progn 
+	  (progn
 	    (setf dlist-arg-style t)
-	    (setf rest (first rest))))
+	    (setf rest (first rest))
+	    ))
 
       ;; second end test (redundant a little, can we merge?
     (if (and (or (eql nil rest) (equal '(nil) rest)) (and (not (eql (strhead form) #\x)) (not (eql (strhead form) #\X))))
@@ -522,15 +518,23 @@
 	  ;; set up of required endian functions
     (let ((bytes-to-string-fn #'bytes-to-string-rev) ; LITTLE ENDIAN
 	  (item (first rest))
-	  (new-rest (rest rest))) ; default rest for numbers
+	  (new-result nil)
+	  (new-rest rest))
+
       #+big-endian(setf bytes-to-string-fn #'bytes-to-string) ; BIG ENDIAN
       (if mod-> 
 	  (setf bytes-to-string-fn #'bytes-to-string))
       (if mod-< 
 	  (setf bytes-to-string-fn #'bytes-to-string-rev))
 
+
+      (if (or (not repeater) (> repeater 0))
+	  (progn
+		 (if (not repeater) (setf repeater 0))
+		 (setf new-rest (rest rest)) ;consume here - default rest for numbers
+      
       ;; pack case satement
-	(let ((new-result
+	(setf new-result
 
 	       ;; FORM of: sequence length / sequence items
 	       (if (> /-pos 0)
@@ -556,7 +560,6 @@
 		    (inc-form)
 		    (concatenate 'string (pack (subseq form 0 /-pos) consumed-length) ret)))
 		
-		  
 		  ;; ALL other FORMS 
 	    (case (strhead form)
 	      (#\n		;Unsigned Short 16bit Big Endian AB=AB
@@ -584,7 +587,6 @@
 	      ;;(#\W ;wide char  ;; Wide chars in strings in concatenate seems to 
 	      ;; crash :(
 	      ;;	     (string (code-char item )))
-
 
 	      ((#\s #\S)		;signed/unsigned short 16bit
 	       (pack-int 2 :native))
@@ -660,9 +662,9 @@
 		 (inc-form)
 		 (setf new-rest rest)
 		""
-		)) 
+		))
 
-		((#\. #\@)
+	      ((#\. #\@)
 		      ;; . consume a numerical arg - null fill or truncate to that position
 		      ;; @ null fill or truncate to repeater specified position
 		 (let ((position item)) ; .
@@ -681,29 +683,25 @@
 			(pack (subseq form 1 (1+ inner-length)) :modifiers (gen-modifiers-list) rest)))
 			  (setf new-rest rest) ; for dlist-style carry on
 			  ret))
-		 
-		 
-
+		 		 
 		(otherwise (progn
 			   (setf new-rest rest) ; didn't do anything, don't consume anything
-			   "")))))
-	    ) ;; let ()
-	
-	  ;(format t "~a~%" new-result)
+			   ""))))
+	    ) ;; (setf new-result)
 
 	  ;; if using a descructable arg list
-	  (if dlist-arg-style
-	      (progn
-		(if (not (equal rest new-rest)) ; consumed an arg
-		    (progn 
-		      ;; so remove the arg from the arg list
-		      (setf (car rest) (second rest)) 
-		      (setf (cdr rest) (rest (rest rest)))))
-		;; regardless, continue using the dlist style
-		(setf new-rest (list rest))))
+	(if dlist-arg-style
+	    (progn
+	      (if (not (equal rest new-rest)) ; consumed an arg
+		  (progn
+		    ;; so remove the arg from the arg list
+		    (setf (car rest) (second rest))
+		    (setf (cdr rest) (rest (rest rest)))))
+	      ;; regardless, continue using the dlist style
+	      (setf new-rest (list rest))))))
 
-	  ;; Recursion for the rest of pack
-	  (apply #'pack (append (list new-form :result (concatenate 'string result new-result) :modifiers modifiers) new-rest)))))))))
+    ;; Recursion for the rest of pack
+    (apply #'pack (append (list new-form :result (concatenate 'string result new-result) :modifiers modifiers) new-rest))))))))
 
 ;; macro for unpack.
 ;; cuts out and returns part of a string to be used for processing while setting
@@ -718,7 +716,7 @@
 ;;;   form: a string of characters corresonding to decodings
 ;;;   string: a string of binary data to be decoded
 ;;;   consumed: optional key parameter.  If nil (default) nothing happens
-;;;             if an integer, ever byte consumed increments consumed
+;;;             if an integer, every byte consumed increments consumed
 ;;;             and it is the last value return in the values list
 ;;;  returns: the decoded data in specified format
 (def-form-parser unpack (string &key (consumed nil) (modifiers nil))
@@ -742,13 +740,16 @@
     (if mod-<
 	(setf string-to-bytes-fn #'string-to-bytes-rev))
 
-    ;; pack case statement and recursive call to unpack
+    ;; unpack case statement and recursive call to unpack
     ;; note: not tail optiomized :fix ?
     (apply #'values
-	   (remove nil (append 
+	   (remove nil (append
 
-            
-	    (if (> /-pos 0)
+		(if (or (not repeater) (> repeater 0))
+   	          (progn
+		    (if (not repeater) (setf repeater 0))
+
+	      (if (> /-pos 0)
 		(progn
 		  (let* ((length-item (subseq form 0 /-pos))
 			 (sequence-item (subseq form (1+ /-pos) offset))
@@ -802,8 +803,7 @@
 		     (if (char= #\A (strhead form)) 
 			 (coerce '(#\null #\space) 'string)
 			 "")))
-			
-		    
+			   
 		(unpack-string (repeater repeater-star)
 			     (string-trim special-chars (cut-str string (length string) new-str))
 			     (string-trim special-chars (cut-str string (min repeater (length string)) new-str))
@@ -835,8 +835,7 @@
 	      )
 
 	     (otherwise nil)
-	     )))
-
+	     )))))
 
 	   ;; result of recursion
 	   (multiple-value-list (unpack new-form new-str :consumed consumed :modifiers modifiers))) :from-end t :count 1))))

@@ -3,7 +3,7 @@ cl-pack
 
 [www.cliki.net/cl-pack](http://www.cliki.net/cl-pack)
 
-cl-pack supplies Perl/PHP/Ruby/Python compatible `pack()` and `unpack()` functions to allow easy use of (binary format) protocols and files with the above mentioned languages and C. cl-pack was released by Dan Ballard under the BSD-3-Clause license.
+cl-pack supplies Perl/PHP/Ruby/Python compatible `pack()` and `unpack()` functions to allow easy use of (binary format) protocols and files with the above mentioned languages and C. cl-pack was released by Dan Ballard <dan@mindstab.net> under the BSD-3-Clause license.
 
 The purpose of cl-pack is to take native Lisp data like numbers, floats, and strings and encode it in a safe binary format in string that can then be written to a file or exchanged with another program while unpack can extract data from binary formats and protocols.
 
@@ -30,6 +30,6 @@ cl-pack is available in [QuickLisp](https://www.quicklisp.org/beta/)
 
 Nearly every feature except a few esoteric ones are supported, check the documentation inside cl-pack.lisp if in doubt and if a feature you need isn't currently supported feel free to contact me and I'll see if I can add it.
 
-**Note** I think the 0.2 release is about as feature complete as I feel I need to get at the moment so I'm pushing it out. If there are not major complaints, then in a bit it will be re-released as 1.0, and if there are complaints, well more code and another pre-1.0 release :smile:
+**Note** I think the this release is about as feature complete as I feel I need to get at the moment so I'm pushing it out. 
 
 **Cavets** cl-pack was developed on an x86 running Ubuntu with SBCL.  It should be endian safe where required and conform to host CPU endianness where required but I haven't been able to test on anything but x86.  I would hope that it would work with most Lisps out there.  Please feel free to get a hold of me if you have issues that need fixing.

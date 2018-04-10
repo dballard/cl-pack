@@ -21,7 +21,7 @@
 (defsystem #:cl-pack
   :name "cl-pack"
   :author "Dan Ballard <dan@mindstab.net>"
-  :version "0.2"
+  :version "1.0"
   :licence "BSD-3-Clause"
   :description "Perl compatible binary pack() and unpack() library"
   :depends-on (:ieee-floats)

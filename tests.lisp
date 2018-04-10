@@ -164,6 +164,10 @@
    (equal (multiple-value-list (unpack "c*" "ABC")) '(#x41 #x42 #x43)) ; basic * repeater
    (equal (multiple-value-list (unpack "c3" "AB")) '(#x41 #x42)) ; only use avail data -- ! should ERROR be raised?
    (equal (multiple-value-list (unpack "c2N" "ABCDEF")) '(#x41 #x42 #x43444546)) ; pick up after repeater
+   (equal (multiple-value-list (unpack "aa0aa" "ABCD")) '("A" "B" "C")) ; 0 means it skips
+   ; https://github.com/dballard/cl-pack/issues/4
+   ; test that unpack 0 consume 0
+   (equal (multiple-value-list (unpack "a0" "abc" :consumed 0)) '(0))
    ))
 
 (deftest unpack-strings () 
@@ -269,5 +273,4 @@
     (equal (multiple-value-list (unpack "a/c" "3AB")) '(65 66))
     (equal (multiple-value-list (unpack "n/c" (concatenate 'string (string #\null) (string (code-char 3)) "ABC"))) '(65 66 67))
     (equal (multiple-value-list (unpack "a/ac" "2ABC")) '("AB" 67))
-  
     ))
