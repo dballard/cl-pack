@@ -117,7 +117,8 @@
    (string= (pack "NX2" #x41424344) "AB") ;delete chars
    (string= (pack "c.c" 65 0 66 ) "B") ; truncate
    (string= (pack "c.c" 65 2 66) (concatenate 'string "A" (string #\null) "B")) ; null pad
-   (string= (pack "c@0c" 65 66) "B") ;truncate
+   (string= (pack "cc0c" 65 66 67) "AB") ; 0 repeat consumes nothing
+   (string= (pack "c@0c" 65 66) "AB") ;truncate
    (string= (pack "c@2c" 65 66) (concatenate 'string "A" (string #\null) "B")) ; null pad
    ))
 
