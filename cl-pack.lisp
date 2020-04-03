@@ -290,7 +290,7 @@
     
 (defun byte-to-2hex (byte)
   "Turn a byte into a string of 2 hex characters"
-  (format nil "~2,0X" byte))
+  (format nil "~2,'0X" byte))
   
 (defun byte-to-2hex-rev (byte)
   (reverse (byte-to-2hex byte)))
